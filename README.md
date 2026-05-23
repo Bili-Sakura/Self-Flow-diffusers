@@ -1,4 +1,4 @@
-<h1 align="center"> Self-Supervised Flow Matching for Scalable Multi-Modal Synthesis (Self-Flow)
+<h1 align="center"> Self-Supervised Flow Matching for Scalable Multi-Modal Synthesis (Self-Flow) [ICML'26]
 </h1>
 
 <p align="center">
