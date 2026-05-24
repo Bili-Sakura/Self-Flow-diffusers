@@ -1,19 +1,15 @@
 """
-Self-Flow ImageNet Inference Package.
-
-This package provides standalone inference code for generating images with
-Self-Flow trained diffusion models on ImageNet 256×256.
-
-Self-Flow: Self-Supervised Flow Matching for Scalable Multi-Modal Synthesis
+Self-Flow ImageNet inference with native Diffusers components under `src/diffusers`.
 """
 
-from .src.model import SelfFlowPerTokenDiT
-from .src.sampling import denoise_loop
-from .src.utils import batched_prc_img, scattercat
+from src.diffusers._register_extensions import register_selfflow_extensions
+
+register_selfflow_extensions()
+
+from diffusers import SelfFlowFlowMatchScheduler, SelfFlowPipeline, SelfFlowTransformer2DModel
 
 __all__ = [
-    "SelfFlowPerTokenDiT",
-    "denoise_loop",
-    "batched_prc_img",
-    "scattercat",
+    "SelfFlowFlowMatchScheduler",
+    "SelfFlowPipeline",
+    "SelfFlowTransformer2DModel",
 ]
