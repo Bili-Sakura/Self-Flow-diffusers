@@ -1,0 +1,3 @@
+from src.diffusers._register_extensions import register_selfflow_extensions
+
+register_selfflow_extensions()

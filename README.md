@@ -53,11 +53,20 @@ print('Downloaded!')
 "
 ```
 
+### Convert checkpoint to Diffusers layout
+
+```bash
+python scripts/convert_selfflow_to_diffusers.py \
+    --checkpoint checkpoints/selfflow_imagenet256.pt \
+    --output checkpoints/selfflow-imagenet256-diffusers \
+    --check-load
+```
+
 ### Generate 50k samples (multi-GPU recommended)
 
 ```bash
 torchrun --nnodes=1 --nproc_per_node=8 sample.py \
-    --ckpt checkpoints/selfflow_imagenet256.pt \
+    --model checkpoints/selfflow-imagenet256-diffusers \
     --output-dir ./samples \
     --num-fid-samples 50000
 ```
@@ -66,7 +75,7 @@ torchrun --nnodes=1 --nproc_per_node=8 sample.py \
 
 ```bash
 python sample.py \
-    --ckpt checkpoints/selfflow_imagenet256.pt \
+    --model checkpoints/selfflow-imagenet256-diffusers \
     --output-dir ./samples \
     --num-fid-samples 50000 \
     --batch-size 64
@@ -76,7 +85,7 @@ python sample.py \
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--ckpt` | required | Path to model checkpoint |
+| `--model` | required | Path to converted Diffusers pipeline directory |
 | `--output-dir` | `./samples` | Output directory for generated samples |
 | `--num-fid-samples` | `50000` | Number of samples to generate |
 | `--batch-size` | `64` | Batch size per GPU |
@@ -113,15 +122,21 @@ A key architectural modification is **per-token timestep conditioning**, which a
 
 ```
 Self-Flow/
-├── sample.py           # Main sampling script
-├── checkpoints/        # Place model checkpoints here
-├── requirements.txt    # Python dependencies
-├── README.md           # This file
-└── src/                # Model and sampling implementations
-    ├── model.py        # SelfFlowPerTokenDiT model
-    ├── sampling.py     # Diffusion sampling utilities
-    └── utils.py        # Position encoding utilities
+├── sample.py                              # FID sampling via SelfFlowPipeline
+├── scripts/
+│   ├── convert_selfflow_to_diffusers.py   # Checkpoint conversion
+│   └── sample_selfflow.py                 # Simple image sampling
+├── src/diffusers/                         # Native Diffusers components
+│   ├── models/transformers/
+│   ├── schedulers/
+│   ├── pipelines/selfflow/
+│   └── utils/
+├── tests/
+├── pyproject.toml
+└── README_DIFFUSERS.md
 ```
+
+See [README_DIFFUSERS.md](README_DIFFUSERS.md) for conversion and pipeline usage.
 
 ## Training Details
 
