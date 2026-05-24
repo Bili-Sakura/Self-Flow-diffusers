@@ -14,10 +14,10 @@ def prc_img(
 ) -> tuple[Tensor, Tensor]:
     c, h, w = x.shape
     x_coords = {
-        "t": torch.arange(1) if t_coord is None else t_coord,
+        "t": torch.arange(1, device=x.device) if t_coord is None else t_coord,
         "h": torch.arange(h, device=x.device),
         "w": torch.arange(w, device=x.device),
-        "l": torch.arange(1) if l_coord is None else l_coord,
+        "l": torch.arange(1, device=x.device) if l_coord is None else l_coord,
     }
     x_ids = torch.cartesian_prod(
         x_coords["t"], x_coords["h"], x_coords["w"], x_coords["l"]

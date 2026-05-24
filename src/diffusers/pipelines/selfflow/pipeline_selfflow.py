@@ -35,7 +35,10 @@ DEFAULT_IMAGE_SIZE = 256
 
 class SelfFlowPipeline(DiffusionPipeline):
     """
-    Pipeline for class-conditional Self-Flow image generation on ImageNet 256x256 latents.
+    Pipeline for class-conditional Self-Flow image generation on ImageNet 256×256 latents.
+
+    Default sampling uses 250 SDE steps with classifier-free guidance scale 3.5
+    over flow times `(0.0, 0.7)`.
     """
 
     model_cpu_offload_seq = "transformer->vae"
@@ -50,7 +53,6 @@ class SelfFlowPipeline(DiffusionPipeline):
         super().__init__()
         self.register_modules(transformer=transformer, scheduler=scheduler, vae=vae)
         self.image_processor = VaeImageProcessor()
-        self.vae_scale_factor = 0.18215
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs):
@@ -139,6 +141,8 @@ class SelfFlowPipeline(DiffusionPipeline):
         model_output: torch.Tensor,
         guidance_scale: float,
     ) -> torch.Tensor:
+        if guidance_scale <= 1.0:
+            return model_output
         model_output_uncond, model_output_cond = model_output.chunk(2)
         return model_output_uncond + guidance_scale * (model_output_cond - model_output_uncond)
 
@@ -148,9 +152,9 @@ class SelfFlowPipeline(DiffusionPipeline):
                 return latents
             raise ValueError("Cannot decode latents without a VAE.")
 
-        latents = latents / self.vae_scale_factor
+        scaling_factor = getattr(self.vae.config, "scaling_factor", 0.18215)
         vae_dtype = next(self.vae.parameters()).dtype
-        latents = latents.to(dtype=vae_dtype)
+        latents = (latents / scaling_factor).to(dtype=vae_dtype)
         if output_type == "latent":
             return latents
         image = self.vae.decode(latents, return_dict=False)[0]
@@ -161,12 +165,24 @@ class SelfFlowPipeline(DiffusionPipeline):
         self,
         class_labels: Union[int, List[int], torch.LongTensor],
         num_inference_steps: int = 250,
-        guidance_scale: float = 1.0,
+        guidance_scale: float = 3.5,
         guidance_interval: Tuple[float, float] = (0.0, 0.7),
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         output_type: str = "pil",
         return_dict: bool = True,
     ) -> Union[ImagePipelineOutput, Tuple]:
+        r"""
+        Generate class-conditional images with Self-Flow.
+
+        Args:
+            class_labels: ImageNet class indices.
+            num_inference_steps: Number of SDE denoising steps (default `250`).
+            guidance_scale: Classifier-free guidance scale (default `3.5`).
+            guidance_interval: Flow-time range where CFG is applied (default `(0.0, 0.7)`).
+            generator: Optional RNG for reproducibility.
+            output_type: `"pil"`, `"np"`, `"pt"`, or `"latent"`.
+            return_dict: Return [`ImagePipelineOutput`] if True.
+        """
         device = self._execution_device
         dtype = next(self.transformer.parameters()).dtype
 
@@ -193,16 +209,20 @@ class SelfFlowPipeline(DiffusionPipeline):
                 model_tokens = torch.cat([tokens, tokens], dim=0)
                 labels = torch.cat([null_labels, class_labels_tensor], dim=0)
             else:
+                if guidance_scale > 1.0 and tokens.shape[0] > batch_size:
+                    tokens = tokens[batch_size:]
                 model_tokens = tokens
                 labels = class_labels_tensor
 
-            timestep_batch = torch.full((model_tokens.shape[0],), flow_time, device=device, dtype=dtype)
+            model_t = 1.0 - flow_time
+            timestep_batch = torch.full((model_tokens.shape[0],), model_t, device=device, dtype=dtype)
             model_output = self.transformer(
                 model_tokens,
                 timestep_batch,
                 labels,
                 return_dict=True,
             ).sample.to(torch.float32)
+            model_output = -model_output
 
             if guidance_active:
                 model_output = self._apply_classifier_free_guidance(model_output, guidance_scale)
@@ -215,17 +235,22 @@ class SelfFlowPipeline(DiffusionPipeline):
                 generator=generator,
             ).prev_sample.to(dtype)
 
-        if guidance_scale > 1.0:
+            if guidance_active:
+                tokens = tokens[batch_size:]
+
+        if guidance_scale > 1.0 and tokens.shape[0] > batch_size:
             tokens = tokens[batch_size:]
 
         final_time = float(timestep_list[-1])
-        final_timestep = torch.full((tokens.shape[0],), final_time, device=device, dtype=dtype)
+        final_model_t = 1.0 - final_time
+        final_timestep = torch.full((tokens.shape[0],), final_model_t, device=device, dtype=dtype)
         final_output = self.transformer(
             tokens,
             final_timestep,
             class_labels_tensor,
             return_dict=True,
         ).sample.to(torch.float32)
+        final_output = -final_output
         tokens = self.scheduler.step(
             final_output,
             final_time,

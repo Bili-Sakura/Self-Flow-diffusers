@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -14,10 +15,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.diffusers._register_extensions import register_selfflow_extensions
-
-register_selfflow_extensions()
-
 try:
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
@@ -25,8 +22,7 @@ except Exception:
     safe_load_file = None
     safe_save_file = None
 
-from diffusers.models.transformers import SelfFlowTransformer2DModel
-from diffusers.schedulers import SelfFlowFlowMatchScheduler
+from src.diffusers.models.transformers.transformer_selfflow import SelfFlowTransformer2DModel
 
 
 SELFFLOW_XL_CONFIG: Dict[str, Any] = {
@@ -70,9 +66,9 @@ def _clean_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Te
     return cleaned
 
 
-def _save_config(output_dir: Path, config: Dict[str, Any]):
+def _save_config(output_dir: Path, config: Dict[str, Any], filename: str = "config.json"):
     output_dir.mkdir(parents=True, exist_ok=True)
-    with open(output_dir / "config.json", "w", encoding="utf-8") as f:
+    with open(output_dir / filename, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, sort_keys=True)
         f.write("\n")
 
@@ -95,7 +91,7 @@ def _write_model_index(output_dir: Path, vae: str | None):
     model_index = {
         "_class_name": "SelfFlowPipeline",
         "_diffusers_version": "0.30.1",
-        "scheduler": ["diffusers", "SelfFlowFlowMatchScheduler"],
+        "scheduler": ["scheduling_flow_match_selfflow", "SelfFlowFlowMatchScheduler"],
         "transformer": ["diffusers", "SelfFlowTransformer2DModel"],
     }
     if vae is not None:
@@ -144,11 +140,14 @@ def main():
             "sampling_method": "Euler",
             "diffusion_form": "sigma",
             "diffusion_norm": 1.0,
-            "last_step": "Mean",
+            "last_step": "Euler",
             "last_step_size": 0.04,
             "reverse": True,
         },
+        filename="scheduler_config.json",
     )
+    scheduler_src = Path(__file__).resolve().parents[1] / "src" / "diffusers" / "schedulers" / "scheduling_flow_match_selfflow.py"
+    shutil.copy2(scheduler_src, scheduler_dir / "scheduling_flow_match_selfflow.py")
     if args.vae:
         with open(output_dir / "vae_pretrained_model_name_or_path.txt", "w", encoding="utf-8") as f:
             f.write(args.vae + os.linesep)

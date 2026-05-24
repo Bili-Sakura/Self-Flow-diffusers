@@ -94,7 +94,10 @@ class _ICPlan:
         mean = x
         reverse_alpha_ratio = alpha_t / d_alpha_t
         var = sigma_t**2 - reverse_alpha_ratio * d_sigma_t * sigma_t
-        return (reverse_alpha_ratio * velocity - mean) / var
+        score = (reverse_alpha_ratio * velocity - mean) / torch.clamp(var, min=1e-8)
+        # At t=1 the variance vanishes; SDE drift reduces to pure velocity.
+        score = torch.where(var.abs() < 1e-6, torch.zeros_like(score), score)
+        return score
 
 
 class SelfFlowFlowMatchScheduler(SchedulerMixin, ConfigMixin):
